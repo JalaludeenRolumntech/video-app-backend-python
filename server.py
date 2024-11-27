@@ -14,22 +14,26 @@ def index():
 def create_room_with_password():
     data = request.json
     room = data["room"]
-    password = data["password"]
-    rooms[room] = {"password": password, "users": []}
+    password = data.get("password", None)  # Password is optional
+    public = data.get("public", True)  # Default to public rooms
+    rooms[room] = {"password": password, "public": public, "users": []}
     return {"success": True}
 
 @socketio.on("join-room")
 def join_room_with_password(data):
     room = data["room"]
-    password = data.get("password")
     user_id = data["user_id"]
 
-    if room not in rooms or rooms[room]["password"] != password:
-        return  # Invalid room or password
+    if room not in rooms:
+        return  # Invalid room
+
+    if not rooms[room]["public"] and rooms[room]["password"] != data.get("password"):
+        return  # Password is required for private rooms
 
     join_room(room)
     rooms[room]["users"].append({"user_id": user_id, "sid": request.sid})
     socketio.emit("user-joined", {"user_id": user_id}, to=room, skip_sid=request.sid)
+
 
 @socketio.on("chat-message")
 def handle_chat_message(data):
