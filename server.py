@@ -30,11 +30,14 @@ def join_room_event(data):
     name = data.get("name", "Guest")
 
     if room not in rooms:
-        rooms[room] = {"users": []}  # Create the room if it doesn't exist
+        # Notify the user if the room doesn't exist
+        socketio.emit("room-error", {"error": "Room does not exist."}, to=request.sid)
+        return
 
     rooms[room]["users"].append({"user_id": user_id, "name": name, "sid": request.sid})
     join_room(room)
     socketio.emit("user-joined", {"user_id": user_id, "name": name}, to=room, skip_sid=request.sid)
+
 
 @socketio.on("chat-message")
 def handle_chat_message(data):
