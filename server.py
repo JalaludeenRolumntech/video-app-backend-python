@@ -10,30 +10,31 @@ rooms = {}
 def index():
     return "Video Conferencing Signaling Server is running!"
 
-@app.route("/create-room", methods=["POST"])
-def create_room_with_password():
-    data = request.json
-    room = data["room"]
-    password = data.get("password", None)  # Password is optional
-    public = data.get("public", True)  # Default to public rooms
-    rooms[room] = {"password": password, "public": public, "users": []}
-    return {"success": True}
-
-@socketio.on("join-room")
-def join_room_with_password(data):
+@socketio.on("create-room")
+def create_room(data):
     room = data["room"]
     user_id = data["user_id"]
+    name = data.get("name", "Guest")
 
     if room not in rooms:
-        return  # Invalid room
+        rooms[room] = {"users": []}
 
-    if not rooms[room]["public"] and rooms[room]["password"] != data.get("password"):
-        return  # Password is required for private rooms
-
+    rooms[room]["users"].append({"user_id": user_id, "name": name, "sid": request.sid})
     join_room(room)
-    rooms[room]["users"].append({"user_id": user_id, "sid": request.sid})
-    socketio.emit("user-joined", {"user_id": user_id}, to=room, skip_sid=request.sid)
+    socketio.emit("user-joined", {"user_id": user_id, "name": name}, to=room, skip_sid=request.sid)
 
+@socketio.on("join-room")
+def join_room_event(data):
+    room = data["room"]
+    user_id = data["user_id"]
+    name = data.get("name", "Guest")
+
+    if room not in rooms:
+        rooms[room] = {"users": []}  # Create the room if it doesn't exist
+
+    rooms[room]["users"].append({"user_id": user_id, "name": name, "sid": request.sid})
+    join_room(room)
+    socketio.emit("user-joined", {"user_id": user_id, "name": name}, to=room, skip_sid=request.sid)
 
 @socketio.on("chat-message")
 def handle_chat_message(data):
