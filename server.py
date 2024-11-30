@@ -6,18 +6,23 @@ socketio = SocketIO(app, cors_allowed_origins="*", async_mode="eventlet")
 
 rooms = {}
 
+
 @app.route("/")
 def index():
     return "Video Conferencing Signaling Server is running!"
+
+@app.route("/home")
+def index():
+    return "Video Home"
 
 @socketio.on("create-room")
 def create_room(data):
     room = data["room"]
     user_id = data["user_id"]
-    name = data.get("name", "Guest")
+    name = data.get("name", "Host")
 
     if room not in rooms:
-        rooms[room] = {"users": []}
+        rooms[room] = {"users": [], "pending": [], "host": {"user_id": user_id, "name": name, "sid": request.sid}}
 
     rooms[room]["users"].append({"user_id": user_id, "name": name, "sid": request.sid})
     join_room(room)
@@ -30,14 +35,48 @@ def join_room_event(data):
     name = data.get("name", "Guest")
 
     if room not in rooms:
-        # Notify the user if the room doesn't exist
         socketio.emit("room-error", {"error": "Room does not exist."}, to=request.sid)
         return
 
-    rooms[room]["users"].append({"user_id": user_id, "name": name, "sid": request.sid})
-    join_room(room)
-    socketio.emit("user-joined", {"user_id": user_id, "name": name}, to=room, skip_sid=request.sid)
+    if "host" not in rooms[room]:
+        socketio.emit("room-error", {"error": "No host in the room."}, to=request.sid)
+        return
 
+    host_sid = rooms[room]["host"]["sid"]
+    rooms[room].setdefault("pending", []).append({"user_id": user_id, "name": name, "sid": request.sid})
+    socketio.emit("join-request", {"user_id": user_id, "name": name}, to=host_sid)
+
+@socketio.on("approve-request")
+def approve_request(data):
+    room = data["room"]
+    user_id = data["user_id"]
+
+    if room not in rooms or "pending" not in rooms[room]:
+        return
+
+    pending_users = rooms[room]["pending"]
+    for user in pending_users:
+        if user["user_id"] == user_id:
+            rooms[room]["users"].append(user)
+            pending_users.remove(user)
+            join_room(room)
+            socketio.emit("user-joined", {"user_id": user_id, "name": user["name"]}, to=room)
+            break
+
+@socketio.on("reject-request")
+def reject_request(data):
+    room = data["room"]
+    user_id = data["user_id"]
+
+    if room not in rooms or "pending" not in rooms[room]:
+        return
+
+    pending_users = rooms[room]["pending"]
+    for user in pending_users:
+        if user["user_id"] == user_id:
+            pending_users.remove(user)
+            socketio.emit("join-rejected", {"user_id": user_id}, to=user["sid"])
+            break
 
 @socketio.on("chat-message")
 def handle_chat_message(data):
