@@ -41,7 +41,7 @@ def join_room_event(data):
     if "host" not in rooms[room]:
         socketio.emit("room-error", {"error": "No host in the room."}, to=request.sid)
         return
-
+    # add host to users and join
     host_sid = rooms[room]["host"]["sid"]
     rooms[room].setdefault("pending", []).append({"user_id": user_id, "name": name, "sid": request.sid})
     socketio.emit("join-request", {"user_id": user_id, "name": name}, to=host_sid)
@@ -123,3 +123,4 @@ def handle_disconnect():
 
 if __name__ == "__main__":
     socketio.run(app, host="0.0.0.0", port=5001)
+
